@@ -1,70 +1,169 @@
-# Getting Started with Create React App
+# AI Chess Arena — ELO Estimation System
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+## Overview
 
-## Available Scripts
+This module estimates the ELO rating of an AI chess engine (LLM or custom agent) by simulating games against Stockfish at different difficulty levels. The goal is to automatically determine the AI’s skill level (with a confidence interval) and optionally produce a Bayesian confidence curve showing the most likely ELO values.
 
-In the project directory, you can run:
+The system evolved in three phases:
 
-### `npm start`
+1. Naive sequential estimation
+2. Binary search with early stopping
+3. Bayesian ELO estimation with confidence curves
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+---
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## 1. Initial Approach: Sequential Estimation
 
-### `npm test`
+The first implementation was a linear scan:
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+- Play a fixed number of games (`gamesPerLevel`) against Stockfish at each level in `STOCKFISH_ELO_LEVELS`.
+- Record wins, losses, and draws for the AI.
+- Compute the score per level:
 
-### `npm run build`
+\[
+\text{score}=\frac{\text{wins}+0.5\cdot \text{draws}}{\text{total games}}\times 100
+\]
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+- Select the level where performance is closest to 50%.
+- Interpolate between levels if necessary.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### Problems
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- Inefficient — every level was tested sequentially
+- No principled confidence estimate
+- No statistical uncertainty model
 
-### `npm run eject`
+---
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## 2. Selected Approach: Binary Search + Bayesian Refinement
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+The final system combines binary search for efficiency with a Bayesian logistic model for accurate ELO estimation and uncertainty quantification.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+### Step 1: Binary Search Across Stockfish Levels
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+- Initialize  
+  \[
+  \text{low}=0,\quad \text{high}=n-1
+  \]
+- Repeat  
+  \[
+  \text{mid}=\left\lfloor\frac{\text{low}+\text{high}}{2}\right\rfloor
+  \]
 
-## Learn More
+- Play games at level **mid** and compute score as before.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+Decision rules:
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+- If score > 55% → AI stronger → search higher (`low = mid + 1`)
+- If score < 45% → AI weaker → search lower (`high = mid - 1`)
+- Stop if score ∈ [45%, 55%] or confidence threshold reached
 
-### Code Splitting
+This reduces required levels from all 8 to roughly:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+\[
+\log_2(8)\approx 3\text{–}4
+\]
 
-### Analyzing the Bundle Size
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+## Step 2: Bayesian ELO Estimation
 
-### Making a Progressive Web App
+### Model
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+For Stockfish level \(i\) with ELO \(L_i\), the probability the AI wins at ELO \(E\) is:
 
-### Advanced Configuration
+\[
+p_i(E)=\frac{1}{1+10^{(L_i-E)/400}}
+\]
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+For observed score \( \text{score}\_i \in [0,1]\):
 
-### Deployment
+\[
+L_i(E)=p_i(E)^{\text{score}\_i}\,\bigl(1-p_i(E)\bigr)^{(1-\text{score}\_i)}
+\]
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+**Log-likelihood over all tested levels:**
 
-### `npm run build` fails to minify
+\[
+\log L(E)=\sum_i \log L_i(E)
+\]
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+---
+
+## Step 3: Maximum Likelihood Estimate (MLE)
+
+Evaluate \(\log L(E)\) over a grid (e.g., 800–2600, step 10):
+
+\[
+\hat{E}=\arg\max_E \log L(E)
+\]
+
+---
+
+## Step 4: Confidence Curve
+
+Compute likelihood over a broad ELO range and apply a likelihood-drop rule:
+
+\[
+\{E : \log L(E)\ge \log L\_{\max}-2\}
+\]
+
+- Peak → most probable ELO
+- Width → confidence interval
+
+**Confidence curve (insert image here):**
+
+> _![Confidence curve placeholder](image-here)_
+
+---
+
+## Step 5: Parallelization & Early Stopping
+
+- Multiple levels tested in parallel (`maxParallel`)
+- Early stopping when confidence is high (based on variance or likelihood width)
+
+---
+
+## Step 6: Integration in Arena
+
+The UI displays:
+
+- Progress bar with `currentLevel` and % progress
+- Scores per level
+- Final ELO estimate + confidence interval
+- Bayesian confidence curve visualization
+
+---
+
+## Mathematical Summary
+
+| Concept                         | Formula                                                                                  |
+| ------------------------------- | ---------------------------------------------------------------------------------------- |
+| **Win probability (logistic)**  | \(\displaystyle p_i(E)=\frac{1}{1+10^{(L_i-E)/400}}\)                                    |
+| **Score per level**             | \(\displaystyle \text{score}\_i=\frac{\text{wins}+0.5\cdot \text{draws}}{\text{games}}\) |
+| **Likelihood per level**        | \(\displaystyle L_i(E)=p_i(E)^{\text{score}\_i}(1-p_i(E))^{(1-\text{score}\_i)}\)        |
+| **Log-likelihood**              | \(\displaystyle \log L(E)=\sum_i \log L_i(E)\)                                           |
+| **Maximum likelihood ELO**      | \(\displaystyle \hat{E}=\arg\max_E \log L(E)\)                                           |
+| **Plausible ELO range**         | \(\displaystyle \{E:\log L(E)\ge \log L\_{\max}-2\}\)                                    |
+| **Confidence (score variance)** | \(\displaystyle \sigma=\frac{1}{N}\sum_i(\text{score}\_i-\bar{\text{score}})^2\)         |
+
+---
+
+## Advantages
+
+- **Efficient** — binary search + parallelization minimizes games
+- **Principled** — logistic probability model
+- **Bayesian** — produces confidence curves & uncertainty intervals
+- **Flexible** — supports LLM agents, Stockfish, configurable games
+- **User-friendly** — live match previews & estimation dashboard
+
+---
+
+## References
+
+- Elo, A. E. (1978). _The Rating of Chessplayers, Past and Present_.
+- Glickman, M. E. (1995). _A Comprehensive Guide to Chess Ratings_.
+- Logistic ELO model:  
+  \[
+  P(\text{win})=\frac{1}{1+10^{\Delta E/400}}
+  \]

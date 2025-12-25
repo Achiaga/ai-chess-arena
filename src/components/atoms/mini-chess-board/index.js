@@ -1,5 +1,5 @@
 import { Chess } from "chess.js";
-import { PIECE_SYMBOLS } from "../../constants";
+import { PIECE_SYMBOLS } from "../../../constants";
 
 export const MiniChessBoard = ({ fen }) => {
   const game = new Chess(fen);
