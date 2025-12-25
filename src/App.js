@@ -1,20 +1,20 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Chess } from "chess.js";
 
 // --- Assets & Constants ---
 const PIECE_SYMBOLS = {
-  p: "♟",
+  p: "♟︎",
   r: "♜",
   n: "♞",
   b: "♝",
   q: "♛",
   k: "♚",
-  P: "♙",
-  R: "♖",
-  N: "♘",
-  B: "♗",
-  Q: "♕",
-  K: "♔",
+  P: "♟︎",
+  R: "♜",
+  N: "♞",
+  B: "♝",
+  Q: "♛",
+  K: "♚",
 };
 
 const STOCKFISH_URL =
@@ -29,10 +29,11 @@ const ChessBoard = ({
   orientation = "w",
   lastMove,
   checkSquare,
+  disabled = false,
 }) => {
-  const board = game.board();
   const [selectedSquare, setSelectedSquare] = useState(null);
   const [optionSquares, setOptionSquares] = useState({});
+  const [draggedPiece, setDraggedPiece] = useState(null);
 
   const getMoveOptions = (square) => {
     const moves = game.moves({ square, verbose: true });
@@ -44,8 +45,8 @@ const ChessBoard = ({
         background:
           game.get(move.to) &&
           game.get(move.to).color !== game.get(square).color
-            ? "radial-gradient(circle, rgba(255,0,0,0.4) 85%, transparent 85%)"
-            : "radial-gradient(circle, rgba(0,255,0,0.4) 25%, transparent 25%)",
+            ? "radial-gradient(circle, rgba(239,68,68,0.5) 85%, transparent 85%)"
+            : "radial-gradient(circle, rgba(34,197,94,0.5) 30%, transparent 30%)",
         borderRadius: "50%",
       };
     });
@@ -53,11 +54,12 @@ const ChessBoard = ({
   };
 
   const onSquareClick = (square) => {
+    if (disabled) return;
+
     // If we have a selected square, try to move
     if (selectedSquare) {
       const move = { from: selectedSquare, to: square, promotion: "q" };
 
-      // Check if valid move
       try {
         const result = onMove(move);
         if (result) {
@@ -70,12 +72,9 @@ const ChessBoard = ({
       }
     }
 
-    // If clicked on a piece that belongs to the side to move (or just selecting a new piece)
+    // If clicked on a piece that belongs to the side to move
     const piece = game.get(square);
-    if (piece) {
-      // Allow selecting own pieces
-      // Note: We might want to restrict this based on whose turn it is in the UI,
-      // but for now we just show options.
+    if (piece && piece.color === game.turn()) {
       const options = getMoveOptions(square);
       if (options) {
         setSelectedSquare(square);
@@ -112,30 +111,34 @@ const ChessBoard = ({
         lastMove && (lastMove.from === square || lastMove.to === square);
       const isCheck = checkSquare === square;
 
-      let bgClass = isLight ? "bg-[#f0d9b5]" : "bg-[#b58863]";
-      if (isLastMove) bgClass = "bg-yellow-200/50"; // Highlight last move
-      if (isCheck) bgClass = "bg-red-500/50"; // Highlight check
+      let bgClass = isLight ? "bg-[#ebecd0]" : "bg-[#739552]";
+      if (isLastMove) bgClass = isLight ? "bg-[#cdd26a]" : "bg-[#aaa23a]";
+      if (isCheck) bgClass = "bg-gradient-to-br from-red-500 to-red-600";
 
       row.push(
         <div
           key={square}
           onClick={() => onSquareClick(square)}
-          className={`w-full h-full flex justify-center items-center relative cursor-pointer ${bgClass}`}
+          className={`w-full h-full flex justify-center items-center relative transition-all duration-200 ${
+            disabled ? "cursor-not-allowed" : "cursor-pointer"
+          } ${bgClass} ${
+            isSelected ? "ring-4 ring-yellow-400 ring-inset z-10" : ""
+          } hover:brightness-110`}
         >
           {/* Rank/File Labels */}
-          {c === 0 && orientation === "w" && (
+          {c === 0 && (
             <span
-              className={`absolute top-0 left-1 text-[10px] font-bold ${
-                isLight ? "text-[#b58863]" : "text-[#f0d9b5]"
+              className={`absolute top-0.5 left-1 text-[11px] font-bold ${
+                isLight ? "text-[#739552]" : "text-[#ebecd0]"
               }`}
             >
               {rank}
             </span>
           )}
-          {r === 7 && orientation === "w" && (
+          {r === 7 && (
             <span
-              className={`absolute bottom-0 right-1 text-[10px] font-bold ${
-                isLight ? "text-[#b58863]" : "text-[#f0d9b5]"
+              className={`absolute bottom-0.5 right-1 text-[11px] font-bold ${
+                isLight ? "text-[#739552]" : "text-[#ebecd0]"
               }`}
             >
               {file}
@@ -145,29 +148,28 @@ const ChessBoard = ({
           {/* Piece */}
           {piece && (
             <span
-              className="text-4xl md:text-5xl select-none drop-shadow-md transition-transform hover:scale-110"
+              className={`text-5xl md:text-6xl select-none transition-transform duration-150 ${
+                isSelected ? "scale-110" : "hover:scale-105"
+              }`}
               style={{
-                color: piece.color === "w" ? "#fff" : "#000",
-                textShadow:
-                  piece.color === "w" ? "0 0 2px #000" : "0 0 2px #fff",
+                filter:
+                  piece.color === "w"
+                    ? "drop-shadow(0 2px 3px rgba(0,0,0,0.6))"
+                    : "drop-shadow(0 2px 3px rgba(255,255,255,0.4))",
+                color: piece.color === "w" ? "#ffffff" : "#000000",
               }}
             >
-              {
-                PIECE_SYMBOLS[
-                  piece.color === "w" ? piece.type.toUpperCase() : piece.type
-                ]
-              }
+              {PIECE_SYMBOLS[piece.type]}
             </span>
           )}
 
-          {/* Selection/Option Overlays */}
-          {isSelected && (
-            <div className="absolute inset-0 bg-yellow-400/40"></div>
-          )}
+          {/* Option Overlays */}
           {isOption && (
             <div
-              className="absolute w-4 h-4"
+              className="absolute pointer-events-none transition-all duration-150"
               style={{
+                width: piece ? "85%" : "30%",
+                height: piece ? "85%" : "30%",
                 background: isOption.background,
                 borderRadius: isOption.borderRadius,
               }}
@@ -177,14 +179,14 @@ const ChessBoard = ({
       );
     }
     rows.push(
-      <div key={i} className="grid grid-cols-8 w-full h-1/8 flex-1">
+      <div key={i} className="grid grid-cols-8 w-full flex-1">
         {row}
       </div>
     );
   }
 
   return (
-    <div className="w-full max-w-[600px] aspect-square border-4 border-[#333] rounded-lg overflow-hidden shadow-2xl flex flex-col">
+    <div className="w-full max-w-[640px] aspect-square border-8 border-[#312e2b] rounded-xl overflow-hidden shadow-2xl flex flex-col bg-[#312e2b]">
       {rows}
     </div>
   );
@@ -194,7 +196,7 @@ const ChessBoard = ({
 function App() {
   // State
   const [game, setGame] = useState(new Chess());
-  const [fen, setFen] = useState(game.fen()); // Force re-render
+  const [fen, setFen] = useState(game.fen());
   const [mode, setMode] = useState("human_vs_stockfish");
   const [orientation, setOrientation] = useState("w");
   const [status, setStatus] = useState("White to move");
@@ -209,12 +211,21 @@ function App() {
   const [coachMessages, setCoachMessages] = useState([]);
   const [lastMove, setLastMove] = useState(null);
   const [checkSquare, setCheckSquare] = useState(null);
+  const [moveHistory, setMoveHistory] = useState([]);
+  const [capturedPieces, setCapturedPieces] = useState({ w: [], b: [] });
 
   // Refs
   const stockfishRef = useRef(null);
-  const gameRef = useRef(game); // Keep ref to current game instance for callbacks
+  const gameRef = useRef(game);
+  const awaitingMoveRef = useRef(false);
+  const messagesEndRef = useRef(null);
 
   // --- Effects ---
+
+  // Auto-scroll coach messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [coachMessages]);
 
   // Init Stockfish
   useEffect(() => {
@@ -229,7 +240,10 @@ function App() {
           const line = event.data;
           if (line.startsWith("bestmove")) {
             const move = line.split(" ")[1];
-            if (move) handleAiMove(move);
+            if (move && awaitingMoveRef.current) {
+              awaitingMoveRef.current = false;
+              handleStockfishMove(move);
+            }
           }
           // Eval parsing
           if (line.includes("info") && line.includes("score cp")) {
@@ -253,7 +267,11 @@ function App() {
 
     initStockfish();
 
-    return () => stockfishRef.current?.terminate();
+    return () => {
+      if (stockfishRef.current) {
+        stockfishRef.current.terminate();
+      }
+    };
   }, []);
 
   // Game Loop for AI vs AI
@@ -276,16 +294,15 @@ function App() {
     // Status
     let s = "";
     if (newGame.isCheckmate())
-      s = `Checkmate! ${newGame.turn() === "w" ? "Black" : "White"} wins`;
-    else if (newGame.isDraw()) s = "Draw";
+      s = `Checkmate! ${newGame.turn() === "w" ? "Black" : "White"} wins! 🏆`;
+    else if (newGame.isDraw()) s = "Draw! 🤝";
     else if (newGame.isCheck())
-      s = `${newGame.turn() === "w" ? "White" : "Black"} is in check!`;
+      s = `${newGame.turn() === "w" ? "White" : "Black"} is in check! ⚠️`;
     else s = `${newGame.turn() === "w" ? "White" : "Black"} to move`;
     setStatus(s);
 
     // Check square
     if (newGame.inCheck()) {
-      // Find king
       const board = newGame.board();
       for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
@@ -294,6 +311,7 @@ function App() {
             const file = String.fromCharCode(97 + c);
             const rank = 8 - r;
             setCheckSquare(`${file}${rank}`);
+            break;
           }
         }
       }
@@ -309,64 +327,84 @@ function App() {
   };
 
   const makeMove = (move) => {
-    const newGame = new Chess(game.fen());
+    const newGame = new Chess(gameRef.current.fen());
     try {
       const result = newGame.move(move);
       if (result) {
         setLastMove({ from: result.from, to: result.to });
+
+        // Track captured pieces
+        if (result.captured) {
+          setCapturedPieces((prev) => ({
+            ...prev,
+            [result.color === "w" ? "b" : "w"]: [
+              ...prev[result.color === "w" ? "b" : "w"],
+              result.captured,
+            ],
+          }));
+        }
+
+        // Add to move history
+        setMoveHistory((prev) => [...prev, result.san]);
+
         updateGameState(newGame);
 
         // Trigger AI response if needed
         if (!newGame.isGameOver()) {
           if (mode === "human_vs_stockfish" && newGame.turn() !== orientation) {
-            triggerStockfishMove(newGame);
+            setTimeout(() => triggerStockfishMove(newGame), 300);
           } else if (
             mode === "human_vs_llm" &&
             newGame.turn() !== orientation
           ) {
-            triggerLlmMove();
+            setTimeout(() => triggerLlmMove(), 300);
           }
         }
         return true;
       }
     } catch (e) {
+      console.error("Move error:", e);
       return false;
     }
     return false;
   };
 
-  const handleAiMove = (moveStr) => {
+  const handleStockfishMove = (moveStr) => {
     setThinking(false);
-    // Convert UCI (e2e4) to move object if needed, or just pass string if chess.js supports it (it usually does or needs simple parsing)
-    // Chess.js .move() supports verbose objects or SAN strings. UCI needs careful handling.
-    // We'll try to let chess.js handle it or parse it.
     const from = moveStr.substring(0, 2);
     const to = moveStr.substring(2, 4);
     const promotion = moveStr.length > 4 ? moveStr.substring(4, 5) : "q";
-
     makeMove({ from, to, promotion });
   };
 
   const triggerStockfishMove = (currGame) => {
+    if (awaitingMoveRef.current || !stockfishRef.current) return;
+
     setThinking(true);
     setThinkingText("Stockfish is thinking...");
+    awaitingMoveRef.current = true;
+
     stockfishRef.current.postMessage(`position fen ${currGame.fen()}`);
     stockfishRef.current.postMessage(`go depth ${stockfishDepth}`);
   };
 
   const triggerLlmMove = async () => {
-    if (!apiKey) return alert("API Key required");
+    if (!apiKey) {
+      alert("⚠️ Groq API Key required for LLM mode");
+      return;
+    }
     setThinking(true);
     setThinkingText("LLM is thinking...");
 
     const prompt = `
 You are a Chess Grandmaster.
-FEN: ${game.fen()}
-PGN: ${game.pgn()}
-Valid Moves: ${game.moves().join(", ")}
+FEN: ${gameRef.current.fen()}
+PGN: ${gameRef.current.pgn()}
+Valid Moves: ${gameRef.current.moves().join(", ")}
 
 Pick the best move.
-Output ONLY the move in SAN or UCI format inside brackets: [MOVE].
+Output ONLY the move in SAN format inside brackets: [MOVE].
+Example: [Nf3] or [e4] or [O-O]
 `;
 
     try {
@@ -390,33 +428,52 @@ Output ONLY the move in SAN or UCI format inside brackets: [MOVE].
 
       const match = content.match(/\[(.*?)\]/);
       if (match) {
-        handleAiMove(match[1]);
-        addCoachMessage(
-          `<strong>LLM Thought:</strong> ${content.substring(0, 100)}...`
-        );
-      } else {
-        // Fallback
-        const valid = game.moves();
-        const words = content.split(/\s+/);
-        const move = words.find((w) => valid.includes(w));
-        if (move) handleAiMove(move);
-        else {
+        const moveStr = match[1].trim();
+        const result = makeMove(moveStr);
+        if (result) {
+          addCoachMessage(`<strong>🤖 LLM played:</strong> ${moveStr}`);
+        } else {
           setThinking(false);
-          alert("LLM failed to move");
+          alert("LLM made invalid move: " + moveStr);
+        }
+      } else {
+        const valid = gameRef.current.moves();
+        const words = content.split(/\s+/);
+        const move = words.find((w) =>
+          valid.includes(w.replace(/[.,!?]/g, ""))
+        );
+        if (move) {
+          makeMove(move.replace(/[.,!?]/g, ""));
+        } else {
+          setThinking(false);
+          alert("LLM failed to provide valid move");
         }
       }
     } catch (e) {
       setThinking(false);
       console.error(e);
+      alert("Error communicating with LLM: " + e.message);
     }
   };
 
   const triggerCoach = async () => {
-    if (!apiKey) return alert("API Key required");
+    if (!apiKey) {
+      alert("⚠️ Groq API Key required for Coach feature");
+      return;
+    }
     setThinking(true);
     setThinkingText("Coach is analyzing...");
 
-    const prompt = `Analyze this position: ${game.fen()}. Key threats and best plans? Concise.`;
+    const prompt = `Analyze this chess position: ${gameRef.current.fen()}. 
+Current turn: ${gameRef.current.turn() === "w" ? "White" : "Black"}
+PGN: ${gameRef.current.pgn()}
+
+Provide a brief analysis covering:
+1. Key threats and tactical opportunities
+2. Best move recommendations
+3. Strategic considerations
+
+Keep it concise (3-4 sentences).`;
 
     try {
       const res = await fetch(
@@ -435,10 +492,10 @@ Output ONLY the move in SAN or UCI format inside brackets: [MOVE].
       );
       const data = await res.json();
       addCoachMessage(
-        `<strong>Coach:</strong> ${data.choices[0].message.content}`
+        `<strong>🎯 Coach Analysis:</strong> ${data.choices[0].message.content}`
       );
     } catch (e) {
-      alert(e.message);
+      alert("Coach error: " + e.message);
     }
     setThinking(false);
   };
@@ -449,40 +506,62 @@ Output ONLY the move in SAN or UCI format inside brackets: [MOVE].
 
   // --- Handlers ---
   const resetGame = () => {
+    awaitingMoveRef.current = false;
     const newGame = new Chess();
     updateGameState(newGame);
     setLastMove(null);
     setCoachMessages([]);
-    if (mode === "llm_vs_llm") setTimeout(triggerLlmMove, 500);
+    setThinking(false);
+    setMoveHistory([]);
+    setCapturedPieces({ w: [], b: [] });
+    if (mode === "llm_vs_llm") {
+      setTimeout(() => triggerLlmMove(), 500);
+    }
+  };
+
+  const formatMoveHistory = () => {
+    const moves = [];
+    for (let i = 0; i < moveHistory.length; i += 2) {
+      moves.push({
+        number: Math.floor(i / 2) + 1,
+        white: moveHistory[i],
+        black: moveHistory[i + 1] || "",
+      });
+    }
+    return moves;
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1a1c2c] to-[#0f1016] text-slate-200 font-sans p-4 md:p-8 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 font-sans p-4 md:p-6 flex flex-col">
       {/* Header */}
-      <header className="flex justify-between items-center mb-6 p-4 rounded-2xl bg-white/5 backdrop-blur border border-white/10 shadow-lg">
-        <div className="flex items-center gap-3">
-          <i className="fa-solid fa-chess-king text-3xl text-blue-400"></i>
+      <header className="flex justify-between items-center mb-6 p-5 rounded-2xl bg-gradient-to-r from-slate-800/80 to-slate-700/80 backdrop-blur-xl border border-slate-600/30 shadow-2xl">
+        <div className="flex items-center gap-4">
+          <div className="text-5xl">♔</div>
           <div>
-            <h1 className="text-xl font-bold">AI Chess Arena</h1>
-            <p className="text-xs text-gray-400">React Edition</p>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+              AI Chess Arena
+            </h1>
+            <p className="text-xs text-slate-400 font-medium">
+              Professional Chess Engine
+            </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <button
             onClick={() => setOrientation((o) => (o === "w" ? "b" : "w"))}
-            className="px-3 py-1 bg-white/10 rounded hover:bg-white/20 transition"
+            className="px-4 py-2 bg-slate-700/50 hover:bg-slate-600/50 rounded-lg transition-all duration-200 font-medium text-sm border border-slate-600/30 hover:border-slate-500/50 hover:scale-105 active:scale-95"
           >
-            Flip Board
+            🔄 Flip Board
           </button>
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col lg:flex-row gap-6">
+      <main className="flex-1 flex flex-col lg:flex-row gap-6 max-w-[1800px] mx-auto w-full">
         {/* Sidebar Controls */}
-        <aside className="w-full lg:w-1/4 bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-6 flex flex-col gap-6">
+        <aside className="w-full lg:w-80 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 flex flex-col gap-5 shadow-2xl">
           <div className="space-y-2">
-            <label className="text-xs font-bold text-gray-400 uppercase">
-              Groq API Key
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+              🔑 Groq API Key
             </label>
             <input
               type="password"
@@ -491,31 +570,32 @@ Output ONLY the move in SAN or UCI format inside brackets: [MOVE].
                 setApiKey(e.target.value);
                 localStorage.setItem("groq_api_key", e.target.value);
               }}
-              className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-sm focus:border-blue-500 outline-none transition"
+              className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-4 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
               placeholder="gsk_..."
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-bold text-gray-400 uppercase">
-              Mode
+            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+              🎮 Game Mode
             </label>
             <select
               value={mode}
               onChange={(e) => setMode(e.target.value)}
-              className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-sm outline-none"
+              className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-4 py-2.5 text-sm outline-none cursor-pointer hover:border-slate-500 transition-all"
             >
-              <option value="human_vs_stockfish">Human vs Stockfish</option>
-              <option value="human_vs_llm">Human vs LLM</option>
-              <option value="llm_vs_llm">LLM vs LLM</option>
-              <option value="coach">Coach Mode</option>
+              <option value="human_vs_stockfish">👤 Human vs Stockfish</option>
+              <option value="human_vs_llm">👤 Human vs LLM</option>
+              <option value="llm_vs_llm">🤖 LLM vs LLM</option>
+              <option value="coach">🎓 Coach Mode</option>
             </select>
           </div>
 
           {mode === "human_vs_stockfish" && (
             <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-400 uppercase">
-                Stockfish Depth: {stockfishDepth}
+              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex justify-between">
+                <span>⚙️ Stockfish Depth</span>
+                <span className="text-blue-400">{stockfishDepth}</span>
               </label>
               <input
                 type="range"
@@ -523,38 +603,94 @@ Output ONLY the move in SAN or UCI format inside brackets: [MOVE].
                 max="20"
                 value={stockfishDepth}
                 onChange={(e) => setStockfishDepth(parseInt(e.target.value))}
-                className="w-full"
+                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
               />
+              <div className="flex justify-between text-[10px] text-slate-500">
+                <span>Beginner</span>
+                <span>Grandmaster</span>
+              </div>
             </div>
           )}
 
           <button
             onClick={resetGame}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-lg font-bold shadow-lg transition transform hover:-translate-y-0.5"
+            className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-xl font-bold shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-xl active:scale-95 text-sm"
           >
-            New Game
+            ♟️ New Game
           </button>
+
+          {/* Captured Pieces */}
+          <div className="space-y-3 pt-4 border-t border-slate-700/50">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              Captured Pieces
+            </h3>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400 w-16">White:</span>
+                <div className="flex flex-wrap gap-1">
+                  {capturedPieces.w.map((piece, i) => (
+                    <span
+                      key={i}
+                      className="text-2xl"
+                      style={{
+                        color: "#ffffff",
+                        filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))",
+                      }}
+                    >
+                      {PIECE_SYMBOLS[piece]}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400 w-16">Black:</span>
+                <div className="flex flex-wrap gap-1">
+                  {capturedPieces.b.map((piece, i) => (
+                    <span
+                      key={i}
+                      className="text-2xl"
+                      style={{
+                        color: "#000000",
+                        filter: "drop-shadow(0 1px 2px rgba(255,255,255,0.4))",
+                      }}
+                    >
+                      {PIECE_SYMBOLS[piece]}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </aside>
 
         {/* Board Area */}
-        <section className="flex-1 flex flex-col items-center relative bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-6">
-          <div className="w-full flex justify-between items-center mb-4 px-4">
-            <div className="flex items-center gap-2">
+        <section className="flex-1 flex flex-col items-center relative bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-2xl">
+          <div className="w-full flex justify-between items-center mb-5 px-4">
+            <div className="flex items-center gap-3">
               <div
-                className={`w-3 h-3 rounded-full ${
+                className={`w-4 h-4 rounded-full transition-all duration-300 ${
                   game.turn() === "w"
-                    ? "bg-white shadow-[0_0_10px_white]"
-                    : "bg-black border border-white"
+                    ? "bg-white shadow-[0_0_15px_rgba(255,255,255,0.8)]"
+                    : "bg-slate-900 border-2 border-white shadow-[0_0_15px_rgba(0,0,0,0.5)]"
                 }`}
               ></div>
-              <span className="font-semibold">{status}</span>
+              <span className="font-bold text-lg">{status}</span>
             </div>
-            <div
-              className={`font-mono text-sm px-2 py-1 rounded ${
-                parseFloat(evalScore) > 0 ? "text-green-400" : "text-red-400"
-              } bg-black/30`}
-            >
-              Eval: {evalScore}
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-400 font-medium">
+                Evaluation:
+              </span>
+              <div
+                className={`font-mono text-base font-bold px-3 py-1.5 rounded-lg transition-all ${
+                  parseFloat(evalScore) > 0
+                    ? "text-green-400 bg-green-500/10 border border-green-500/30"
+                    : parseFloat(evalScore) < 0
+                    ? "text-red-400 bg-red-500/10 border border-red-500/30"
+                    : "text-slate-400 bg-slate-700/30 border border-slate-600/30"
+                }`}
+              >
+                {evalScore}
+              </div>
             </div>
           </div>
 
@@ -564,52 +700,109 @@ Output ONLY the move in SAN or UCI format inside brackets: [MOVE].
             orientation={orientation}
             lastMove={lastMove}
             checkSquare={checkSquare}
+            disabled={thinking}
           />
 
           {thinking && (
-            <div className="absolute bottom-8 bg-black/80 backdrop-blur px-6 py-3 rounded-full flex items-center gap-3 border border-white/10 shadow-xl z-10">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              <span className="text-sm font-medium">{thinkingText}</span>
+            <div className="absolute bottom-8 bg-slate-900/90 backdrop-blur-xl px-8 py-4 rounded-2xl flex items-center gap-4 border border-slate-700/50 shadow-2xl z-10 animate-pulse">
+              <div className="relative">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-t-2 border-blue-500"></div>
+                <div className="absolute inset-0 rounded-full bg-blue-500/20 animate-ping"></div>
+              </div>
+              <span className="text-sm font-semibold">{thinkingText}</span>
             </div>
           )}
         </section>
 
         {/* Info Panel */}
-        <aside className="w-full lg:w-1/4 bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-6 flex flex-col gap-4">
-          <h3 className="font-bold border-b border-white/10 pb-2">
-            Coach & Chat
-          </h3>
+        <aside className="w-full lg:w-80 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 flex flex-col gap-5 shadow-2xl">
+          <div className="flex items-center justify-between border-b border-slate-700/50 pb-3">
+            <h3 className="font-bold text-lg">💬 Coach & Analysis</h3>
+            <button
+              onClick={triggerCoach}
+              disabled={thinking}
+              className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 rounded-lg text-xs transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Ask Coach
+            </button>
+          </div>
 
-          <div className="flex-1 bg-black/20 rounded-lg p-3 overflow-y-auto text-sm space-y-3 min-h-[200px] max-h-[400px]">
+          <div className="flex-1 bg-slate-900/30 rounded-xl p-4 overflow-y-auto text-sm space-y-3 min-h-[200px] max-h-[300px] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/20">
             {coachMessages.length === 0 && (
-              <div className="text-gray-500 italic">No insights yet...</div>
+              <div className="text-slate-500 italic text-center py-8">
+                💡 No insights yet. Click "Ask Coach" for analysis!
+              </div>
             )}
             {coachMessages.map((msg) => (
               <div
                 key={msg.id}
-                className="bg-white/5 p-2 rounded border-l-2 border-blue-500"
+                className="bg-slate-800/50 p-3 rounded-lg border-l-4 border-blue-500 hover:bg-slate-800/70 transition-all"
                 dangerouslySetInnerHTML={{ __html: msg.html }}
               ></div>
             ))}
+            <div ref={messagesEndRef} />
           </div>
 
-          <button
-            onClick={triggerCoach}
-            className="w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition"
-          >
-            <i className="fa-solid fa-comment-dots mr-2"></i> Ask Coach
-          </button>
-
-          <div className="mt-auto">
-            <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">
-              PGN
+          {/* Move History */}
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-700/50 pb-2">
+              📜 Move History
             </h4>
-            <div className="bg-black/30 p-2 rounded text-xs font-mono h-24 overflow-y-auto text-gray-300">
-              {game.pgn() || "Game started..."}
+            <div className="bg-slate-900/30 rounded-xl p-3 max-h-40 overflow-y-auto text-xs scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/20">
+              {formatMoveHistory().length === 0 ? (
+                <div className="text-slate-500 italic text-center py-2">
+                  No moves yet
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {formatMoveHistory().map((move) => (
+                    <div
+                      key={move.number}
+                      className="flex items-center gap-2 hover:bg-slate-800/30 px-2 py-1 rounded transition-all"
+                    >
+                      <span className="font-bold text-slate-500 w-6">
+                        {move.number}.
+                      </span>
+                      <span className="font-mono text-slate-200 flex-1">
+                        {move.white}
+                      </span>
+                      {move.black && (
+                        <span className="font-mono text-slate-200 flex-1">
+                          {move.black}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* PGN Export */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+              <span>📋 PGN</span>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(game.pgn());
+                  alert("✅ PGN copied to clipboard!");
+                }}
+                className="text-[10px] px-2 py-1 bg-slate-700/50 hover:bg-slate-600/50 rounded transition-all"
+              >
+                Copy
+              </button>
+            </h4>
+            <div className="bg-slate-900/30 p-3 rounded-xl text-xs font-mono max-h-24 overflow-y-auto text-slate-300 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/20 leading-relaxed">
+              {game.pgn() || "Game not started..."}
             </div>
           </div>
         </aside>
       </main>
+
+      {/* Footer */}
+      <footer className="mt-6 text-center text-xs text-slate-500">
+        <p>Powered by Stockfish • chess.js • Groq AI</p>
+      </footer>
     </div>
   );
 }
