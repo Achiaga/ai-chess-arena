@@ -13,9 +13,10 @@ export class MatchRunner {
     this.winner = null; // white, black, draw
     this.moveCount = 0;
     this.analysis = {
-      white: { good: 0, bad: 0, blunders: 0 },
-      black: { good: 0, bad: 0, blunders: 0 },
+      white: { good: 0, bad: 0, blunders: 0, totalMoves: 0 },
+      black: { good: 0, bad: 0, blunders: 0, totalMoves: 0 },
     };
+    this.performance = null;
   }
 
   async start() {
@@ -90,7 +91,54 @@ export class MatchRunner {
       this.winner = this.game.turn() === "w" ? "black" : "white"; // Assume loss on invalid
       this.result = this.winner === "white" ? "1-0" : "0-1";
     }
+
+    // Calculate performance statistics
+    this.calculatePerformance();
+
     this.notifyUpdate();
+  }
+
+  calculatePerformance() {
+    // Simple performance calculation based on move count and result
+    // In a real implementation, you'd analyze move quality with an engine
+
+    const totalMoves = this.moveCount;
+    if (totalMoves === 0) return;
+
+    // Assign moves to each player
+    const whiteMoves = Math.ceil(totalMoves / 2);
+    const blackMoves = Math.floor(totalMoves / 2);
+
+    // Base score on result
+    let whiteBaseScore = 50;
+    let blackBaseScore = 50;
+
+    if (this.winner === "white") {
+      whiteBaseScore = 70;
+      blackBaseScore = 30;
+    } else if (this.winner === "black") {
+      whiteBaseScore = 30;
+      blackBaseScore = 70;
+    }
+
+    // Adjust for game length (shorter wins = better performance)
+    const lengthFactor = Math.max(0, (50 - totalMoves) / 50);
+
+    if (this.winner === "white") {
+      whiteBaseScore += lengthFactor * 20;
+    } else if (this.winner === "black") {
+      blackBaseScore += lengthFactor * 20;
+    }
+
+    // Ensure scores are in valid range
+    const whiteScore = Math.min(95, Math.max(5, Math.round(whiteBaseScore)));
+    const blackScore = Math.min(95, Math.max(5, Math.round(blackBaseScore)));
+
+    this.performance = {
+      whiteScore,
+      blackScore,
+      advantage: whiteScore - blackScore,
+    };
   }
 
   notifyUpdate() {
@@ -102,6 +150,7 @@ export class MatchRunner {
         winner: this.winner,
         moveCount: this.moveCount,
         history: this.history,
+        performance: this.performance,
       });
     }
   }

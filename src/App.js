@@ -1,201 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Chess } from "chess.js";
-import TournamentView from "./components/TournamentView";
+import { ArenaView } from "./components/organism/Arena";
+import { STOCKFISH_URL, PIECE_SYMBOLS } from "./constants";
+import { ChessBoard } from "./components/atoms/chess-board";
 
-// --- Assets & Constants ---
-const PIECE_SYMBOLS = {
-  p: "♟︎",
-  r: "♜",
-  n: "♞",
-  b: "♝",
-  q: "♛",
-  k: "♚",
-  P: "♟︎",
-  R: "♜",
-  N: "♞",
-  B: "♝",
-  Q: "♛",
-  K: "♚",
-};
-
-const STOCKFISH_URL =
-  "https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.0/stockfish.js";
-
-// --- Components ---
-
-// 1. Chessboard Component
-const ChessBoard = ({
-  game,
-  onMove,
-  orientation = "w",
-  lastMove,
-  checkSquare,
-  disabled = false,
-}) => {
-  const [selectedSquare, setSelectedSquare] = useState(null);
-  const [optionSquares, setOptionSquares] = useState({});
-  const [draggedPiece, setDraggedPiece] = useState(null);
-
-  const getMoveOptions = (square) => {
-    const moves = game.moves({ square, verbose: true });
-    if (moves.length === 0) return false;
-
-    const newOptions = {};
-    moves.forEach((move) => {
-      newOptions[move.to] = {
-        background:
-          game.get(move.to) &&
-          game.get(move.to).color !== game.get(square).color
-            ? "radial-gradient(circle, rgba(239,68,68,0.5) 85%, transparent 85%)"
-            : "radial-gradient(circle, rgba(34,197,94,0.5) 30%, transparent 30%)",
-        borderRadius: "50%",
-      };
-    });
-    return newOptions;
-  };
-
-  const onSquareClick = (square) => {
-    if (disabled) return;
-
-    // If we have a selected square, try to move
-    if (selectedSquare) {
-      const move = { from: selectedSquare, to: square, promotion: "q" };
-
-      try {
-        const result = onMove(move);
-        if (result) {
-          setSelectedSquare(null);
-          setOptionSquares({});
-          return;
-        }
-      } catch (e) {
-        // Invalid move
-      }
-    }
-
-    // If clicked on a piece that belongs to the side to move
-    const piece = game.get(square);
-    if (piece && piece.color === game.turn()) {
-      const options = getMoveOptions(square);
-      if (options) {
-        setSelectedSquare(square);
-        setOptionSquares(options);
-        return;
-      }
-    }
-
-    // Deselect if clicking empty square or invalid piece
-    setSelectedSquare(null);
-    setOptionSquares({});
-  };
-
-  // Render Board
-  const rows = [];
-  for (let i = 0; i < 8; i++) {
-    const row = [];
-    for (let j = 0; j < 8; j++) {
-      // Orientation logic
-      const r = orientation === "w" ? i : 7 - i;
-      const c = orientation === "w" ? j : 7 - j;
-
-      const file = String.fromCharCode(97 + c);
-      const rank = 8 - r;
-      const square = `${file}${rank}`;
-
-      const isLight = (r + c) % 2 === 0;
-      const piece = game.get(square);
-
-      // Styles
-      const isSelected = selectedSquare === square;
-      const isOption = optionSquares[square];
-      const isLastMove =
-        lastMove && (lastMove.from === square || lastMove.to === square);
-      const isCheck = checkSquare === square;
-
-      let bgClass = isLight ? "bg-[#ebecd0]" : "bg-[#739552]";
-      if (isLastMove) bgClass = isLight ? "bg-[#cdd26a]" : "bg-[#aaa23a]";
-      if (isCheck) bgClass = "bg-gradient-to-br from-red-500 to-red-600";
-
-      row.push(
-        <div
-          key={square}
-          onClick={() => onSquareClick(square)}
-          className={`w-full h-full flex justify-center items-center relative transition-all duration-200 ${
-            disabled ? "cursor-not-allowed" : "cursor-pointer"
-          } ${bgClass} ${
-            isSelected ? "ring-4 ring-yellow-400 ring-inset z-10" : ""
-          } hover:brightness-110`}
-        >
-          {/* Rank/File Labels */}
-          {c === 0 && (
-            <span
-              className={`absolute top-0.5 left-1 text-[11px] font-bold ${
-                isLight ? "text-[#739552]" : "text-[#ebecd0]"
-              }`}
-            >
-              {rank}
-            </span>
-          )}
-          {r === 7 && (
-            <span
-              className={`absolute bottom-0.5 right-1 text-[11px] font-bold ${
-                isLight ? "text-[#739552]" : "text-[#ebecd0]"
-              }`}
-            >
-              {file}
-            </span>
-          )}
-
-          {/* Piece */}
-          {piece && (
-            <span
-              className={`text-5xl md:text-6xl select-none transition-transform duration-150 ${
-                isSelected ? "scale-110" : "hover:scale-105"
-              }`}
-              style={{
-                filter:
-                  piece.color === "w"
-                    ? "drop-shadow(0 2px 3px rgba(0,0,0,0.6))"
-                    : "drop-shadow(0 2px 3px rgba(255,255,255,0.4))",
-                color: piece.color === "w" ? "#ffffff" : "#000000",
-              }}
-            >
-              {PIECE_SYMBOLS[piece.type]}
-            </span>
-          )}
-
-          {/* Option Overlays */}
-          {isOption && (
-            <div
-              className="absolute pointer-events-none transition-all duration-150"
-              style={{
-                width: piece ? "85%" : "30%",
-                height: piece ? "85%" : "30%",
-                background: isOption.background,
-                borderRadius: isOption.borderRadius,
-              }}
-            ></div>
-          )}
-        </div>
-      );
-    }
-    rows.push(
-      <div key={i} className="grid grid-cols-8 w-full h-[12.5%]">
-        {row}
-      </div>
-    );
-  }
-
-  return (
-    <div className="w-full max-w-[640px] aspect-square border-8 border-[#312e2b] rounded-xl overflow-hidden shadow-2xl flex flex-col bg-[#312e2b]">
-      {rows}
-    </div>
-  );
-};
-
-// --- Main App Component ---
 function App() {
-  // State
   const [game, setGame] = useState(new Chess());
   const [fen, setFen] = useState(game.fen());
   const [mode, setMode] = useState("human_vs_stockfish");
@@ -226,20 +35,15 @@ function App() {
   const [moveHistory, setMoveHistory] = useState([]);
   const [capturedPieces, setCapturedPieces] = useState({ w: [], b: [] });
 
-  // Refs
   const stockfishRef = useRef(null);
   const gameRef = useRef(game);
   const awaitingMoveRef = useRef(false);
   const messagesEndRef = useRef(null);
 
-  // --- Effects ---
-
-  // Auto-scroll coach messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [coachMessages]);
 
-  // Init Stockfish
   useEffect(() => {
     const initStockfish = async () => {
       try {
@@ -257,7 +61,7 @@ function App() {
               handleStockfishMove(move);
             }
           }
-          // Eval parsing
+
           if (line.includes("info") && line.includes("score cp")) {
             const match = line.match(/score cp (-?\d+)/);
             if (match) {
@@ -286,7 +90,6 @@ function App() {
     };
   }, []);
 
-  // Game Loop for AI vs AI
   useEffect(() => {
     if (game.isGameOver() || thinking) return;
 
@@ -311,14 +114,11 @@ function App() {
     }
   }, [fen, mode, thinking, gameStarted, whiteAiConfig, blackAiConfig]);
 
-  // --- Helpers ---
-
   const updateGameState = (newGame) => {
     setGame(newGame);
     setFen(newGame.fen());
     gameRef.current = newGame;
 
-    // Status
     let s = "";
     if (newGame.isCheckmate())
       s = `Checkmate! ${newGame.turn() === "w" ? "Black" : "White"} wins! 🏆`;
@@ -328,7 +128,6 @@ function App() {
     else s = `${newGame.turn() === "w" ? "White" : "Black"} to move`;
     setStatus(s);
 
-    // Check square
     if (newGame.inCheck()) {
       const board = newGame.board();
       for (let r = 0; r < 8; r++) {
@@ -346,7 +145,6 @@ function App() {
       setCheckSquare(null);
     }
 
-    // Stockfish Eval
     if (stockfishRef.current && !newGame.isGameOver()) {
       stockfishRef.current.postMessage(`position fen ${newGame.fen()}`);
       stockfishRef.current.postMessage("go depth 10");
@@ -360,7 +158,6 @@ function App() {
       if (result) {
         setLastMove({ from: result.from, to: result.to });
 
-        // Track captured pieces
         if (result.captured) {
           setCapturedPieces((prev) => ({
             ...prev,
@@ -371,12 +168,10 @@ function App() {
           }));
         }
 
-        // Add to move history
         setMoveHistory((prev) => [...prev, result.san]);
 
         updateGameState(newGame);
 
-        // Trigger AI response if needed
         if (!newGame.isGameOver()) {
           if (mode === "human_vs_stockfish" && newGame.turn() !== orientation) {
             setTimeout(() => triggerStockfishMove(newGame), 300);
@@ -482,7 +277,6 @@ Example: [Nf3] or [e4] or [O-O]
       if (match) {
         moveStr = match[1].trim();
       } else {
-        // Fallback: try to find any valid move in the text
         const valid = gameRef.current.moves();
         const words = content.split(/\s+/);
         moveStr = words
@@ -501,9 +295,7 @@ Example: [Nf3] or [e4] or [O-O]
           addCoachMessage(
             `<strong>⚠️ LLM error:</strong> Invalid move attempted: ${moveStr}`
           );
-          // If in AI vs AI mode, maybe try again or stop
           if (mode === "llm_vs_llm" || mode === "stockfish_vs_llm") {
-            // Stop to avoid infinite loop of invalid moves
             setMode("human_vs_stockfish");
           }
         }
@@ -580,7 +372,6 @@ Keep it concise (3-4 sentences).`;
     setCoachMessages((prev) => [...prev, { id: Date.now(), html: msg }]);
   };
 
-  // --- Handlers ---
   const resetGame = () => {
     awaitingMoveRef.current = false;
     const newGame = new Chess();
@@ -672,7 +463,6 @@ Keep it concise (3-4 sentences).`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 font-sans p-4 md:p-6 flex flex-col">
-      {/* Header */}
       <header className="flex justify-between items-center mb-6 p-5 rounded-2xl bg-gradient-to-r from-slate-800/80 to-slate-700/80 backdrop-blur-xl border border-slate-600/30 shadow-2xl">
         <div className="flex items-center gap-4">
           <div className="text-5xl">♔</div>
@@ -685,7 +475,60 @@ Keep it concise (3-4 sentences).`;
             </p>
           </div>
         </div>
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+            🎮 Game Mode
+          </label>
+          <select
+            value={mode}
+            onChange={(e) => setMode(e.target.value)}
+            className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-4 py-2.5 text-sm outline-none cursor-pointer hover:border-slate-500 transition-all"
+          >
+            <option value="human_vs_stockfish">👤 Human vs Stockfish</option>
+            <option value="human_vs_llm">👤 Human vs LLM</option>
+            <option value="llm_vs_llm">🤖 LLM vs LLM</option>
+            <option value="stockfish_vs_llm">⚔️ Stockfish vs LLM</option>
+            <option value="tournament">🏆 Arena Mode</option>
+          </select>
+        </div>
         <div className="flex gap-3">
+          <div className="">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              🔑 API Keys
+            </h3>
+            <div className=" flex justify-center items-center gap-x-2">
+              <div className="space-x-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">
+                  Groq Key
+                </label>
+                <input
+                  type="password"
+                  value={groqApiKey}
+                  onChange={(e) => {
+                    setGroqApiKey(e.target.value);
+                    localStorage.setItem("groq_api_key", e.target.value);
+                  }}
+                  className="w-20 bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-xs focus:border-blue-500 outline-none transition-all"
+                  placeholder="gsk_..."
+                />
+              </div>
+              <div className="space-x-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">
+                  OpenAI Key
+                </label>
+                <input
+                  type="password"
+                  value={openAiApiKey}
+                  onChange={(e) => {
+                    setOpenAiApiKey(e.target.value);
+                    localStorage.setItem("openai_api_key", e.target.value);
+                  }}
+                  className="w-20 bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-xs focus:border-blue-500 outline-none transition-all"
+                  placeholder="sk-..."
+                />
+              </div>
+            </div>
+          </div>
           <button
             onClick={() => setOrientation((o) => (o === "w" ? "b" : "w"))}
             className="px-4 py-2 bg-slate-700/50 hover:bg-slate-600/50 rounded-lg transition-all duration-200 font-medium text-sm border border-slate-600/30 hover:border-slate-500/50 hover:scale-105 active:scale-95"
@@ -697,7 +540,7 @@ Keep it concise (3-4 sentences).`;
 
       <main className="flex-1 flex flex-col lg:flex-row gap-6 max-w-[1800px] mx-auto w-full">
         {mode === "tournament" ? (
-          <TournamentView
+          <ArenaView
             whiteAiConfig={whiteAiConfig}
             blackAiConfig={blackAiConfig}
             groqApiKey={groqApiKey}
@@ -705,28 +548,7 @@ Keep it concise (3-4 sentences).`;
           />
         ) : (
           <>
-            {/* Sidebar Controls */}
             <aside className="w-full lg:w-80 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 flex flex-col gap-5 shadow-2xl overflow-y-auto max-h-[calc(100vh-120px)]">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                  🎮 Game Mode
-                </label>
-                <select
-                  value={mode}
-                  onChange={(e) => setMode(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-4 py-2.5 text-sm outline-none cursor-pointer hover:border-slate-500 transition-all"
-                >
-                  <option value="human_vs_stockfish">
-                    👤 Human vs Stockfish
-                  </option>
-                  <option value="human_vs_llm">👤 Human vs LLM</option>
-                  <option value="llm_vs_llm">🤖 LLM vs LLM</option>
-                  <option value="stockfish_vs_llm">⚔️ Stockfish vs LLM</option>
-                  <option value="coach">🎓 Coach Mode</option>
-                  <option value="tournament">🏆 Tournament Mode</option>
-                </select>
-              </div>
-
               <div className="space-y-4 py-2 border-t border-slate-700/50">
                 {(mode === "llm_vs_llm" ||
                   (mode === "human_vs_llm" && orientation === "b") ||
@@ -790,7 +612,6 @@ Keep it concise (3-4 sentences).`;
                 </button>
               </div>
 
-              {/* Captured Pieces */}
               <div className="space-y-3 pt-4 border-t border-slate-700/50">
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
                   Captured Pieces
@@ -835,7 +656,6 @@ Keep it concise (3-4 sentences).`;
               </div>
             </aside>
 
-            {/* Game Board Area */}
             <section className="flex-1 flex flex-col items-center relative bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-2xl">
               <div className="w-full flex justify-between items-center mb-5 px-4">
                 <div className="flex items-center gap-3">
@@ -892,7 +712,6 @@ Keep it concise (3-4 sentences).`;
               )}
             </section>
 
-            {/* Info Panel */}
             <aside className="w-full lg:w-80 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 flex flex-col gap-5 shadow-2xl">
               <div className="flex items-center justify-between border-b border-slate-700/50 pb-3">
                 <h3 className="font-bold text-lg">💬 Coach & Analysis</h3>
@@ -921,7 +740,6 @@ Keep it concise (3-4 sentences).`;
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Move History */}
               <div className="space-y-3">
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-700/50 pb-2">
                   📜 Move History
@@ -956,46 +774,6 @@ Keep it concise (3-4 sentences).`;
                 </div>
               </div>
 
-              {/* API Keys (Moved here or kept here if they were here) */}
-              <div className="space-y-4 py-2 border-t border-slate-700/50">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  🔑 API Keys
-                </h3>
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">
-                      Groq Key
-                    </label>
-                    <input
-                      type="password"
-                      value={groqApiKey}
-                      onChange={(e) => {
-                        setGroqApiKey(e.target.value);
-                        localStorage.setItem("groq_api_key", e.target.value);
-                      }}
-                      className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-xs focus:border-blue-500 outline-none transition-all"
-                      placeholder="gsk_..."
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">
-                      OpenAI Key
-                    </label>
-                    <input
-                      type="password"
-                      value={openAiApiKey}
-                      onChange={(e) => {
-                        setOpenAiApiKey(e.target.value);
-                        localStorage.setItem("openai_api_key", e.target.value);
-                      }}
-                      className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-xs focus:border-blue-500 outline-none transition-all"
-                      placeholder="sk-..."
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* PGN Export */}
               <div className="space-y-2">
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
                   <span>📋 PGN</span>
@@ -1018,9 +796,8 @@ Keep it concise (3-4 sentences).`;
         )}
       </main>
 
-      {/* Footer */}
       <footer className="mt-6 text-center text-xs text-slate-500">
-        <p>Powered by Stockfish • chess.js • Groq AI</p>
+        <p>Powered by Stockfish • chess.js • Groq/OpenAI AI</p>
       </footer>
     </div>
   );
