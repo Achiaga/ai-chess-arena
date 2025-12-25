@@ -308,7 +308,7 @@ function App() {
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [fen, mode, thinking]);
+  }, [fen, mode, thinking, gameStarted, whiteAiConfig, blackAiConfig]);
 
   // --- Helpers ---
 
