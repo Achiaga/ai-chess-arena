@@ -179,7 +179,7 @@ const ChessBoard = ({
       );
     }
     rows.push(
-      <div key={i} className="grid grid-cols-8 w-full flex-1">
+      <div key={i} className="grid grid-cols-8 w-full h-[12.5%]">
         {row}
       </div>
     );
@@ -203,11 +203,22 @@ function App() {
   const [evalScore, setEvalScore] = useState("0.00");
   const [thinking, setThinking] = useState(false);
   const [thinkingText, setThinkingText] = useState("");
-  const [apiKey, setApiKey] = useState(
+  const [whiteAiConfig, setWhiteAiConfig] = useState({
+    provider: localStorage.getItem("white_ai_provider") || "groq",
+    model: localStorage.getItem("white_ai_model") || "llama3-70b-8192",
+  });
+  const [blackAiConfig, setBlackAiConfig] = useState({
+    provider: localStorage.getItem("black_ai_provider") || "openai",
+    model: localStorage.getItem("black_ai_model") || "gpt-4o-mini",
+  });
+  const [groqApiKey, setGroqApiKey] = useState(
     localStorage.getItem("groq_api_key") || ""
   );
+  const [openAiApiKey, setOpenAiApiKey] = useState(
+    localStorage.getItem("openai_api_key") || ""
+  );
   const [stockfishDepth, setStockfishDepth] = useState(10);
-  const [llmModel, setLlmModel] = useState("llama3-70b-8192");
+  const [gameStarted, setGameStarted] = useState(false);
   const [coachMessages, setCoachMessages] = useState([]);
   const [lastMove, setLastMove] = useState(null);
   const [checkSquare, setCheckSquare] = useState(null);
@@ -276,9 +287,24 @@ function App() {
 
   // Game Loop for AI vs AI
   useEffect(() => {
-    if (mode === "llm_vs_llm" && !game.isGameOver() && !thinking) {
+    if (game.isGameOver() || thinking) return;
+
+    if (mode === "llm_vs_llm" && gameStarted) {
       const timer = setTimeout(() => {
-        triggerLlmMove();
+        const turn = game.turn();
+        const config = turn === "w" ? whiteAiConfig : blackAiConfig;
+        triggerLlmMove(config);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+
+    if (mode === "stockfish_vs_llm" && gameStarted) {
+      const timer = setTimeout(() => {
+        if (game.turn() === "w") {
+          triggerStockfishMove(game);
+        } else {
+          triggerLlmMove(blackAiConfig);
+        }
       }, 1000);
       return () => clearTimeout(timer);
     }
@@ -357,7 +383,11 @@ function App() {
             mode === "human_vs_llm" &&
             newGame.turn() !== orientation
           ) {
-            setTimeout(() => triggerLlmMove(), 300);
+            const config =
+              newGame.turn() === "w" ? whiteAiConfig : blackAiConfig;
+            setTimeout(() => triggerLlmMove(config), 300);
+          } else if (mode === "stockfish_vs_llm") {
+            // Handled by the AI vs AI useEffect loop
           }
         }
         return true;
@@ -388,13 +418,21 @@ function App() {
     stockfishRef.current.postMessage(`go depth ${stockfishDepth}`);
   };
 
-  const triggerLlmMove = async () => {
+  const triggerLlmMove = async (config) => {
+    const { provider, model } = config;
+    const apiKey = provider === "groq" ? groqApiKey : openAiApiKey;
+    const apiUrl =
+      provider === "groq"
+        ? "https://api.groq.com/openai/v1/chat/completions"
+        : "https://api.openai.com/v1/chat/completions";
+
     if (!apiKey) {
-      alert("⚠️ Groq API Key required for LLM mode");
+      alert(`⚠️ ${provider === "groq" ? "Groq" : "OpenAI"} API Key required`);
+      setMode("human_vs_stockfish");
       return;
     }
     setThinking(true);
-    setThinkingText("LLM is thinking...");
+    setThinkingText(`${model} is thinking...`);
 
     const prompt = `
 You are a Chess Grandmaster.
@@ -402,63 +440,103 @@ FEN: ${gameRef.current.fen()}
 PGN: ${gameRef.current.pgn()}
 Valid Moves: ${gameRef.current.moves().join(", ")}
 
-Pick the best move.
+Pick the best move for ${gameRef.current.turn() === "w" ? "White" : "Black"}.
 Output ONLY the move in SAN format inside brackets: [MOVE].
 Example: [Nf3] or [e4] or [O-O]
 `;
 
     try {
-      const res = await fetch(
-        "https://api.groq.com/openai/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages: [{ role: "user", content: prompt }],
-            model: llmModel,
-            temperature: 0.1,
-          }),
-        }
-      );
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: prompt }],
+          model: model,
+          temperature: 0.1,
+        }),
+      });
+
+      if (res.status === 401) {
+        throw new Error(
+          `Unauthorized: Invalid ${
+            provider === "groq" ? "Groq" : "OpenAI"
+          } API Key`
+        );
+      }
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `API Error: ${res.status}`);
+      }
+
       const data = await res.json();
       const content = data.choices[0].message.content;
 
       const match = content.match(/\[(.*?)\]/);
+      let moveStr = "";
+
       if (match) {
-        const moveStr = match[1].trim();
+        moveStr = match[1].trim();
+      } else {
+        // Fallback: try to find any valid move in the text
+        const valid = gameRef.current.moves();
+        const words = content.split(/\s+/);
+        moveStr = words
+          .find((w) => valid.includes(w.replace(/[.,!?\[\]]/g, "")))
+          ?.replace(/[.,!?\[\]]/g, "");
+      }
+
+      if (moveStr) {
         const result = makeMove(moveStr);
         if (result) {
           addCoachMessage(`<strong>🤖 LLM played:</strong> ${moveStr}`);
+          setThinking(false);
         } else {
           setThinking(false);
-          alert("LLM made invalid move: " + moveStr);
+          console.error(`Invalid move from LLM: ${moveStr}`);
+          addCoachMessage(
+            `<strong>⚠️ LLM error:</strong> Invalid move attempted: ${moveStr}`
+          );
+          // If in AI vs AI mode, maybe try again or stop
+          if (mode === "llm_vs_llm" || mode === "stockfish_vs_llm") {
+            // Stop to avoid infinite loop of invalid moves
+            setMode("human_vs_stockfish");
+          }
         }
       } else {
-        const valid = gameRef.current.moves();
-        const words = content.split(/\s+/);
-        const move = words.find((w) =>
-          valid.includes(w.replace(/[.,!?]/g, ""))
+        setThinking(false);
+        addCoachMessage(
+          `<strong>⚠️ LLM error:</strong> Could not parse move from response.`
         );
-        if (move) {
-          makeMove(move.replace(/[.,!?]/g, ""));
-        } else {
-          setThinking(false);
-          alert("LLM failed to provide valid move");
+        if (mode === "llm_vs_llm" || mode === "stockfish_vs_llm") {
+          setMode("human_vs_stockfish");
         }
       }
     } catch (e) {
       setThinking(false);
       console.error(e);
-      alert("Error communicating with LLM: " + e.message);
+      addCoachMessage(`<strong>❌ API Error:</strong> ${e.message}`);
+      if (e.message.includes("Unauthorized")) {
+        alert(`${provider === "groq" ? "Groq" : "OpenAI"} API Key is invalid.`);
+      }
     }
   };
 
   const triggerCoach = async () => {
+    const turn = game.turn();
+    const config = turn === "w" ? whiteAiConfig : blackAiConfig;
+    const { provider, model } = config;
+    const apiKey = provider === "groq" ? groqApiKey : openAiApiKey;
+    const apiUrl =
+      provider === "groq"
+        ? "https://api.groq.com/openai/v1/chat/completions"
+        : "https://api.openai.com/v1/chat/completions";
+
     if (!apiKey) {
-      alert("⚠️ Groq API Key required for Coach feature");
+      alert(`⚠️ ${provider === "groq" ? "Groq" : "OpenAI"} API Key required`);
       return;
     }
     setThinking(true);
@@ -476,26 +554,23 @@ Provide a brief analysis covering:
 Keep it concise (3-4 sentences).`;
 
     try {
-      const res = await fetch(
-        "https://api.groq.com/openai/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages: [{ role: "user", content: prompt }],
-            model: "llama3-70b-8192",
-          }),
-        }
-      );
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: prompt }],
+          model: model,
+        }),
+      });
       const data = await res.json();
       addCoachMessage(
         `<strong>🎯 Coach Analysis:</strong> ${data.choices[0].message.content}`
       );
     } catch (e) {
-      alert("Coach error: " + e.message);
+      addCoachMessage(`<strong>❌ Coach error:</strong> ${e.message}`);
     }
     setThinking(false);
   };
@@ -512,11 +587,9 @@ Keep it concise (3-4 sentences).`;
     setLastMove(null);
     setCoachMessages([]);
     setThinking(false);
+    setGameStarted(false);
     setMoveHistory([]);
     setCapturedPieces({ w: [], b: [] });
-    if (mode === "llm_vs_llm") {
-      setTimeout(() => triggerLlmMove(), 500);
-    }
   };
 
   const formatMoveHistory = () => {
@@ -530,6 +603,71 @@ Keep it concise (3-4 sentences).`;
     }
     return moves;
   };
+
+  const AiConfigSection = ({ title, config, setConfig }) => (
+    <div className="space-y-3 p-4 bg-slate-900/40 rounded-xl border border-slate-700/50">
+      <h3 className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2">
+        {title}
+      </h3>
+      <div className="space-y-2">
+        <label className="text-[10px] font-bold text-slate-500 uppercase">
+          Provider
+        </label>
+        <select
+          value={config.provider}
+          onChange={(e) => {
+            const p = e.target.value;
+            const newConfig = {
+              provider: p,
+              model: p === "groq" ? "llama3-70b-8192" : "gpt-4o-mini",
+            };
+            setConfig(newConfig);
+            const side = title.toLowerCase().includes("white")
+              ? "white"
+              : "black";
+            localStorage.setItem(`${side}_ai_provider`, p);
+            localStorage.setItem(`${side}_ai_model`, newConfig.model);
+          }}
+          className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-xs outline-none cursor-pointer hover:border-slate-500 transition-all"
+        >
+          <option value="groq">Groq</option>
+          <option value="openai">OpenAI</option>
+        </select>
+      </div>
+      <div className="space-y-2">
+        <label className="text-[10px] font-bold text-slate-500 uppercase">
+          Model
+        </label>
+        <select
+          value={config.model}
+          onChange={(e) => {
+            const m = e.target.value;
+            const newConfig = { ...config, model: m };
+            setConfig(newConfig);
+            const side = title.toLowerCase().includes("white")
+              ? "white"
+              : "black";
+            localStorage.setItem(`${side}_ai_model`, m);
+          }}
+          className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-xs outline-none cursor-pointer hover:border-slate-500 transition-all"
+        >
+          {config.provider === "groq" ? (
+            <>
+              <option value="llama3-70b-8192">Llama 3 70B</option>
+              <option value="llama3-8b-8192">Llama 3 8B</option>
+              <option value="mixtral-8x7b-32768">Mixtral 8x7B</option>
+            </>
+          ) : (
+            <>
+              <option value="gpt-4o-mini">GPT-4o Mini</option>
+              <option value="gpt-4o">GPT-4o</option>
+              <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+            </>
+          )}
+        </select>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-slate-100 font-sans p-4 md:p-6 flex flex-col">
@@ -558,23 +696,7 @@ Keep it concise (3-4 sentences).`;
 
       <main className="flex-1 flex flex-col lg:flex-row gap-6 max-w-[1800px] mx-auto w-full">
         {/* Sidebar Controls */}
-        <aside className="w-full lg:w-80 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 flex flex-col gap-5 shadow-2xl">
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              🔑 Groq API Key
-            </label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => {
-                setApiKey(e.target.value);
-                localStorage.setItem("groq_api_key", e.target.value);
-              }}
-              className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-4 py-2.5 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
-              placeholder="gsk_..."
-            />
-          </div>
-
+        <aside className="w-full lg:w-80 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 flex flex-col gap-5 shadow-2xl overflow-y-auto max-h-[calc(100vh-120px)]">
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
               🎮 Game Mode
@@ -587,8 +709,31 @@ Keep it concise (3-4 sentences).`;
               <option value="human_vs_stockfish">👤 Human vs Stockfish</option>
               <option value="human_vs_llm">👤 Human vs LLM</option>
               <option value="llm_vs_llm">🤖 LLM vs LLM</option>
+              <option value="stockfish_vs_llm">⚔️ Stockfish vs LLM</option>
               <option value="coach">🎓 Coach Mode</option>
             </select>
+          </div>
+
+          <div className="space-y-4 py-2 border-t border-slate-700/50">
+            {(mode === "llm_vs_llm" ||
+              (mode === "human_vs_llm" && orientation === "b") ||
+              (mode === "coach" && game.turn() === "w")) && (
+              <AiConfigSection
+                title="⚪ White AI"
+                config={whiteAiConfig}
+                setConfig={setWhiteAiConfig}
+              />
+            )}
+            {(mode === "llm_vs_llm" ||
+              mode === "stockfish_vs_llm" ||
+              (mode === "human_vs_llm" && orientation === "w") ||
+              (mode === "coach" && game.turn() === "b")) && (
+              <AiConfigSection
+                title="⚫ Black AI"
+                config={blackAiConfig}
+                setConfig={setBlackAiConfig}
+              />
+            )}
           </div>
 
           {mode === "human_vs_stockfish" && (
@@ -612,12 +757,23 @@ Keep it concise (3-4 sentences).`;
             </div>
           )}
 
-          <button
-            onClick={resetGame}
-            className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-xl font-bold shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-xl active:scale-95 text-sm"
-          >
-            ♟️ New Game
-          </button>
+          <div className="space-y-4 py-2 border-t border-slate-700/50">
+            {(mode === "llm_vs_llm" || mode === "stockfish_vs_llm") &&
+              !gameStarted && (
+                <button
+                  onClick={() => setGameStarted(true)}
+                  className="w-full py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 rounded-xl font-bold shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-xl active:scale-95 text-sm mb-2"
+                >
+                  🚀 Start Match
+                </button>
+              )}
+            <button
+              onClick={resetGame}
+              className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-xl font-bold shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-xl active:scale-95 text-sm"
+            >
+              ♟️ New Game
+            </button>
+          </div>
 
           {/* Captured Pieces */}
           <div className="space-y-3 pt-4 border-t border-slate-700/50">
@@ -775,6 +931,44 @@ Keep it concise (3-4 sentences).`;
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className="space-y-4 py-2 border-t border-slate-700/50">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              🔑 API Keys
+            </h3>
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">
+                  Groq Key
+                </label>
+                <input
+                  type="password"
+                  value={groqApiKey}
+                  onChange={(e) => {
+                    setGroqApiKey(e.target.value);
+                    localStorage.setItem("groq_api_key", e.target.value);
+                  }}
+                  className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-xs focus:border-blue-500 outline-none transition-all"
+                  placeholder="gsk_..."
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">
+                  OpenAI Key
+                </label>
+                <input
+                  type="password"
+                  value={openAiApiKey}
+                  onChange={(e) => {
+                    setOpenAiApiKey(e.target.value);
+                    localStorage.setItem("openai_api_key", e.target.value);
+                  }}
+                  className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-xs focus:border-blue-500 outline-none transition-all"
+                  placeholder="sk-..."
+                />
+              </div>
             </div>
           </div>
 
