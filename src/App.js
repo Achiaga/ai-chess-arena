@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Chess } from "chess.js";
+import TournamentView from "./components/TournamentView";
 
 // --- Assets & Constants ---
 const PIECE_SYMBOLS = {
@@ -695,302 +696,326 @@ Keep it concise (3-4 sentences).`;
       </header>
 
       <main className="flex-1 flex flex-col lg:flex-row gap-6 max-w-[1800px] mx-auto w-full">
-        {/* Sidebar Controls */}
-        <aside className="w-full lg:w-80 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 flex flex-col gap-5 shadow-2xl overflow-y-auto max-h-[calc(100vh-120px)]">
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              🎮 Game Mode
-            </label>
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value)}
-              className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-4 py-2.5 text-sm outline-none cursor-pointer hover:border-slate-500 transition-all"
-            >
-              <option value="human_vs_stockfish">👤 Human vs Stockfish</option>
-              <option value="human_vs_llm">👤 Human vs LLM</option>
-              <option value="llm_vs_llm">🤖 LLM vs LLM</option>
-              <option value="stockfish_vs_llm">⚔️ Stockfish vs LLM</option>
-              <option value="coach">🎓 Coach Mode</option>
-            </select>
-          </div>
-
-          <div className="space-y-4 py-2 border-t border-slate-700/50">
-            {(mode === "llm_vs_llm" ||
-              (mode === "human_vs_llm" && orientation === "b") ||
-              (mode === "coach" && game.turn() === "w")) && (
-              <AiConfigSection
-                title="⚪ White AI"
-                config={whiteAiConfig}
-                setConfig={setWhiteAiConfig}
-              />
-            )}
-            {(mode === "llm_vs_llm" ||
-              mode === "stockfish_vs_llm" ||
-              (mode === "human_vs_llm" && orientation === "w") ||
-              (mode === "coach" && game.turn() === "b")) && (
-              <AiConfigSection
-                title="⚫ Black AI"
-                config={blackAiConfig}
-                setConfig={setBlackAiConfig}
-              />
-            )}
-          </div>
-
-          {mode === "human_vs_stockfish" && (
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex justify-between">
-                <span>⚙️ Stockfish Depth</span>
-                <span className="text-blue-400">{stockfishDepth}</span>
-              </label>
-              <input
-                type="range"
-                min="1"
-                max="20"
-                value={stockfishDepth}
-                onChange={(e) => setStockfishDepth(parseInt(e.target.value))}
-                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
-              />
-              <div className="flex justify-between text-[10px] text-slate-500">
-                <span>Beginner</span>
-                <span>Grandmaster</span>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-4 py-2 border-t border-slate-700/50">
-            {(mode === "llm_vs_llm" || mode === "stockfish_vs_llm") &&
-              !gameStarted && (
-                <button
-                  onClick={() => setGameStarted(true)}
-                  className="w-full py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 rounded-xl font-bold shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-xl active:scale-95 text-sm mb-2"
-                >
-                  🚀 Start Match
-                </button>
-              )}
-            <button
-              onClick={resetGame}
-              className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-xl font-bold shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-xl active:scale-95 text-sm"
-            >
-              ♟️ New Game
-            </button>
-          </div>
-
-          {/* Captured Pieces */}
-          <div className="space-y-3 pt-4 border-t border-slate-700/50">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Captured Pieces
-            </h3>
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 w-16">White:</span>
-                <div className="flex flex-wrap gap-1">
-                  {capturedPieces.w.map((piece, i) => (
-                    <span
-                      key={i}
-                      className="text-2xl"
-                      style={{
-                        color: "#ffffff",
-                        filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))",
-                      }}
-                    >
-                      {PIECE_SYMBOLS[piece]}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 w-16">Black:</span>
-                <div className="flex flex-wrap gap-1">
-                  {capturedPieces.b.map((piece, i) => (
-                    <span
-                      key={i}
-                      className="text-2xl"
-                      style={{
-                        color: "#000000",
-                        filter: "drop-shadow(0 1px 2px rgba(255,255,255,0.4))",
-                      }}
-                    >
-                      {PIECE_SYMBOLS[piece]}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        {/* Board Area */}
-        <section className="flex-1 flex flex-col items-center relative bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-2xl">
-          <div className="w-full flex justify-between items-center mb-5 px-4">
-            <div className="flex items-center gap-3">
-              <div
-                className={`w-4 h-4 rounded-full transition-all duration-300 ${
-                  game.turn() === "w"
-                    ? "bg-white shadow-[0_0_15px_rgba(255,255,255,0.8)]"
-                    : "bg-slate-900 border-2 border-white shadow-[0_0_15px_rgba(0,0,0,0.5)]"
-                }`}
-              ></div>
-              <span className="font-bold text-lg">{status}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-slate-400 font-medium">
-                Evaluation:
-              </span>
-              <div
-                className={`font-mono text-base font-bold px-3 py-1.5 rounded-lg transition-all ${
-                  parseFloat(evalScore) > 0
-                    ? "text-green-400 bg-green-500/10 border border-green-500/30"
-                    : parseFloat(evalScore) < 0
-                    ? "text-red-400 bg-red-500/10 border border-red-500/30"
-                    : "text-slate-400 bg-slate-700/30 border border-slate-600/30"
-                }`}
-              >
-                {evalScore}
-              </div>
-            </div>
-          </div>
-
-          <ChessBoard
-            game={game}
-            onMove={makeMove}
-            orientation={orientation}
-            lastMove={lastMove}
-            checkSquare={checkSquare}
-            disabled={thinking}
+        {mode === "tournament" ? (
+          <TournamentView
+            whiteAiConfig={whiteAiConfig}
+            blackAiConfig={blackAiConfig}
+            groqApiKey={groqApiKey}
+            openAiApiKey={openAiApiKey}
           />
-
-          {thinking && (
-            <div className="absolute bottom-8 bg-slate-900/90 backdrop-blur-xl px-8 py-4 rounded-2xl flex items-center gap-4 border border-slate-700/50 shadow-2xl z-10 animate-pulse">
-              <div className="relative">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-t-2 border-blue-500"></div>
-                <div className="absolute inset-0 rounded-full bg-blue-500/20 animate-ping"></div>
+        ) : (
+          <>
+            {/* Sidebar Controls */}
+            <aside className="w-full lg:w-80 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 flex flex-col gap-5 shadow-2xl overflow-y-auto max-h-[calc(100vh-120px)]">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                  🎮 Game Mode
+                </label>
+                <select
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value)}
+                  className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-4 py-2.5 text-sm outline-none cursor-pointer hover:border-slate-500 transition-all"
+                >
+                  <option value="human_vs_stockfish">
+                    👤 Human vs Stockfish
+                  </option>
+                  <option value="human_vs_llm">👤 Human vs LLM</option>
+                  <option value="llm_vs_llm">🤖 LLM vs LLM</option>
+                  <option value="stockfish_vs_llm">⚔️ Stockfish vs LLM</option>
+                  <option value="coach">🎓 Coach Mode</option>
+                  <option value="tournament">🏆 Tournament Mode</option>
+                </select>
               </div>
-              <span className="text-sm font-semibold">{thinkingText}</span>
-            </div>
-          )}
-        </section>
 
-        {/* Info Panel */}
-        <aside className="w-full lg:w-80 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 flex flex-col gap-5 shadow-2xl">
-          <div className="flex items-center justify-between border-b border-slate-700/50 pb-3">
-            <h3 className="font-bold text-lg">💬 Coach & Analysis</h3>
-            <button
-              onClick={triggerCoach}
-              disabled={thinking}
-              className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 rounded-lg text-xs transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Ask Coach
-            </button>
-          </div>
-
-          <div className="flex-1 bg-slate-900/30 rounded-xl p-4 overflow-y-auto text-sm space-y-3 min-h-[200px] max-h-[300px] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/20">
-            {coachMessages.length === 0 && (
-              <div className="text-slate-500 italic text-center py-8">
-                💡 No insights yet. Click "Ask Coach" for analysis!
+              <div className="space-y-4 py-2 border-t border-slate-700/50">
+                {(mode === "llm_vs_llm" ||
+                  (mode === "human_vs_llm" && orientation === "b") ||
+                  (mode === "coach" && game.turn() === "w")) && (
+                  <AiConfigSection
+                    title="⚪ White AI"
+                    config={whiteAiConfig}
+                    setConfig={setWhiteAiConfig}
+                  />
+                )}
+                {(mode === "llm_vs_llm" ||
+                  mode === "stockfish_vs_llm" ||
+                  (mode === "human_vs_llm" && orientation === "w") ||
+                  (mode === "coach" && game.turn() === "b")) && (
+                  <AiConfigSection
+                    title="⚫ Black AI"
+                    config={blackAiConfig}
+                    setConfig={setBlackAiConfig}
+                  />
+                )}
               </div>
-            )}
-            {coachMessages.map((msg) => (
-              <div
-                key={msg.id}
-                className="bg-slate-800/50 p-3 rounded-lg border-l-4 border-blue-500 hover:bg-slate-800/70 transition-all"
-                dangerouslySetInnerHTML={{ __html: msg.html }}
-              ></div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
 
-          {/* Move History */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-700/50 pb-2">
-              📜 Move History
-            </h4>
-            <div className="bg-slate-900/30 rounded-xl p-3 max-h-40 overflow-y-auto text-xs scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/20">
-              {formatMoveHistory().length === 0 ? (
-                <div className="text-slate-500 italic text-center py-2">
-                  No moves yet
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {formatMoveHistory().map((move) => (
-                    <div
-                      key={move.number}
-                      className="flex items-center gap-2 hover:bg-slate-800/30 px-2 py-1 rounded transition-all"
-                    >
-                      <span className="font-bold text-slate-500 w-6">
-                        {move.number}.
-                      </span>
-                      <span className="font-mono text-slate-200 flex-1">
-                        {move.white}
-                      </span>
-                      {move.black && (
-                        <span className="font-mono text-slate-200 flex-1">
-                          {move.black}
-                        </span>
-                      )}
-                    </div>
-                  ))}
+              {mode === "human_vs_stockfish" && (
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex justify-between">
+                    <span>⚙️ Stockfish Depth</span>
+                    <span className="text-blue-400">{stockfishDepth}</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="20"
+                    value={stockfishDepth}
+                    onChange={(e) =>
+                      setStockfishDepth(parseInt(e.target.value))
+                    }
+                    className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-500">
+                    <span>Beginner</span>
+                    <span>Grandmaster</span>
+                  </div>
                 </div>
               )}
-            </div>
-          </div>
 
-          <div className="space-y-4 py-2 border-t border-slate-700/50">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              🔑 API Keys
-            </h3>
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">
-                  Groq Key
-                </label>
-                <input
-                  type="password"
-                  value={groqApiKey}
-                  onChange={(e) => {
-                    setGroqApiKey(e.target.value);
-                    localStorage.setItem("groq_api_key", e.target.value);
-                  }}
-                  className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-xs focus:border-blue-500 outline-none transition-all"
-                  placeholder="gsk_..."
-                />
+              <div className="space-y-4 py-2 border-t border-slate-700/50">
+                {(mode === "llm_vs_llm" || mode === "stockfish_vs_llm") &&
+                  !gameStarted && (
+                    <button
+                      onClick={() => setGameStarted(true)}
+                      className="w-full py-3 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 rounded-xl font-bold shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-xl active:scale-95 text-sm mb-2"
+                    >
+                      🚀 Start Match
+                    </button>
+                  )}
+                <button
+                  onClick={resetGame}
+                  className="w-full py-3 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-xl font-bold shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-xl active:scale-95 text-sm"
+                >
+                  ♟️ New Game
+                </button>
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase">
-                  OpenAI Key
-                </label>
-                <input
-                  type="password"
-                  value={openAiApiKey}
-                  onChange={(e) => {
-                    setOpenAiApiKey(e.target.value);
-                    localStorage.setItem("openai_api_key", e.target.value);
-                  }}
-                  className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-xs focus:border-blue-500 outline-none transition-all"
-                  placeholder="sk-..."
-                />
-              </div>
-            </div>
-          </div>
 
-          {/* PGN Export */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-              <span>📋 PGN</span>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(game.pgn());
-                  alert("✅ PGN copied to clipboard!");
-                }}
-                className="text-[10px] px-2 py-1 bg-slate-700/50 hover:bg-slate-600/50 rounded transition-all"
-              >
-                Copy
-              </button>
-            </h4>
-            <div className="bg-slate-900/30 p-3 rounded-xl text-xs font-mono max-h-24 overflow-y-auto text-slate-300 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/20 leading-relaxed">
-              {game.pgn() || "Game not started..."}
-            </div>
-          </div>
-        </aside>
+              {/* Captured Pieces */}
+              <div className="space-y-3 pt-4 border-t border-slate-700/50">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  Captured Pieces
+                </h3>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400 w-16">White:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {capturedPieces.w.map((piece, i) => (
+                        <span
+                          key={i}
+                          className="text-2xl"
+                          style={{
+                            color: "#ffffff",
+                            filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))",
+                          }}
+                        >
+                          {PIECE_SYMBOLS[piece]}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400 w-16">Black:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {capturedPieces.b.map((piece, i) => (
+                        <span
+                          key={i}
+                          className="text-2xl"
+                          style={{
+                            color: "#000000",
+                            filter:
+                              "drop-shadow(0 1px 2px rgba(255,255,255,0.4))",
+                          }}
+                        >
+                          {PIECE_SYMBOLS[piece]}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+            {/* Game Board Area */}
+            <section className="flex-1 flex flex-col items-center relative bg-slate-800/30 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-2xl">
+              <div className="w-full flex justify-between items-center mb-5 px-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-4 h-4 rounded-full transition-all duration-300 ${
+                      game.turn() === "w"
+                        ? "bg-white shadow-[0_0_15px_rgba(255,255,255,0.8)]"
+                        : "bg-slate-900 border-2 border-white shadow-[0_0_15px_rgba(0,0,0,0.5)]"
+                    }`}
+                  ></div>
+                  <span className="font-bold text-lg">{status}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-400 font-medium">
+                    Evaluation:
+                  </span>
+                  <div
+                    className={`font-mono text-base font-bold px-3 py-1.5 rounded-lg transition-all ${
+                      parseFloat(evalScore) > 0
+                        ? "text-green-400 bg-green-500/10 border border-green-500/30"
+                        : parseFloat(evalScore) < 0
+                        ? "text-red-400 bg-red-500/10 border border-red-500/30"
+                        : "text-slate-400 bg-slate-700/30 border border-slate-600/30"
+                    }`}
+                  >
+                    {evalScore}
+                  </div>
+                </div>
+              </div>
+
+              <ChessBoard
+                game={game}
+                onMove={makeMove}
+                orientation={orientation}
+                lastMove={lastMove}
+                checkSquare={checkSquare}
+                disabled={
+                  (mode === "human_vs_stockfish" && thinking) ||
+                  mode === "llm_vs_llm" ||
+                  mode === "stockfish_vs_llm" ||
+                  (mode === "human_vs_llm" && thinking) ||
+                  game.isGameOver()
+                }
+              />
+
+              {thinking && (
+                <div className="absolute bottom-8 bg-slate-900/90 backdrop-blur-xl px-8 py-4 rounded-2xl flex items-center gap-4 border border-slate-700/50 shadow-2xl z-10 animate-pulse">
+                  <div className="relative">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-t-2 border-blue-500"></div>
+                    <div className="absolute inset-0 rounded-full bg-blue-500/20 animate-ping"></div>
+                  </div>
+                  <span className="text-sm font-semibold">{thinkingText}</span>
+                </div>
+              )}
+            </section>
+
+            {/* Info Panel */}
+            <aside className="w-full lg:w-80 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 flex flex-col gap-5 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-700/50 pb-3">
+                <h3 className="font-bold text-lg">💬 Coach & Analysis</h3>
+                <button
+                  onClick={triggerCoach}
+                  disabled={thinking}
+                  className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 rounded-lg text-xs transition-all hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Ask Coach
+                </button>
+              </div>
+
+              <div className="flex-1 bg-slate-900/30 rounded-xl p-4 overflow-y-auto text-sm space-y-3 min-h-[200px] max-h-[300px] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/20">
+                {coachMessages.length === 0 && (
+                  <div className="text-slate-500 italic text-center py-8">
+                    💡 No insights yet. Click "Ask Coach" for analysis!
+                  </div>
+                )}
+                {coachMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className="bg-slate-800/50 p-3 rounded-lg border-l-4 border-blue-500 hover:bg-slate-800/70 transition-all"
+                    dangerouslySetInnerHTML={{ __html: msg.html }}
+                  ></div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Move History */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-700/50 pb-2">
+                  📜 Move History
+                </h4>
+                <div className="bg-slate-900/30 rounded-xl p-3 max-h-40 overflow-y-auto text-xs scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/20">
+                  {formatMoveHistory().length === 0 ? (
+                    <div className="text-slate-500 italic text-center py-2">
+                      No moves yet
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {formatMoveHistory().map((move) => (
+                        <div
+                          key={move.number}
+                          className="flex items-center gap-2 hover:bg-slate-800/30 px-2 py-1 rounded transition-all"
+                        >
+                          <span className="font-bold text-slate-500 w-6">
+                            {move.number}.
+                          </span>
+                          <span className="font-mono text-slate-200 flex-1">
+                            {move.white}
+                          </span>
+                          {move.black && (
+                            <span className="font-mono text-slate-200 flex-1">
+                              {move.black}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* API Keys (Moved here or kept here if they were here) */}
+              <div className="space-y-4 py-2 border-t border-slate-700/50">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  🔑 API Keys
+                </h3>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">
+                      Groq Key
+                    </label>
+                    <input
+                      type="password"
+                      value={groqApiKey}
+                      onChange={(e) => {
+                        setGroqApiKey(e.target.value);
+                        localStorage.setItem("groq_api_key", e.target.value);
+                      }}
+                      className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-xs focus:border-blue-500 outline-none transition-all"
+                      placeholder="gsk_..."
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">
+                      OpenAI Key
+                    </label>
+                    <input
+                      type="password"
+                      value={openAiApiKey}
+                      onChange={(e) => {
+                        setOpenAiApiKey(e.target.value);
+                        localStorage.setItem("openai_api_key", e.target.value);
+                      }}
+                      className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-xs focus:border-blue-500 outline-none transition-all"
+                      placeholder="sk-..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* PGN Export */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                  <span>📋 PGN</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(game.pgn());
+                      alert("✅ PGN copied to clipboard!");
+                    }}
+                    className="text-[10px] px-2 py-1 bg-slate-700/50 hover:bg-slate-600/50 rounded transition-all"
+                  >
+                    Copy
+                  </button>
+                </h4>
+                <div className="bg-slate-900/30 p-3 rounded-xl text-xs font-mono max-h-24 overflow-y-auto text-slate-300 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900/20 leading-relaxed">
+                  {game.pgn() || "Game not started..."}
+                </div>
+              </div>
+            </aside>
+          </>
+        )}
       </main>
 
       {/* Footer */}
