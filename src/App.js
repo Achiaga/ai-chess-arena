@@ -529,12 +529,6 @@ Keep it concise (3-4 sentences).`;
               </div>
             </div>
           </div>
-          <button
-            onClick={() => setOrientation((o) => (o === "w" ? "b" : "w"))}
-            className="px-4 py-2 bg-slate-700/50 hover:bg-slate-600/50 rounded-lg transition-all duration-200 font-medium text-sm border border-slate-600/30 hover:border-slate-500/50 hover:scale-105 active:scale-95"
-          >
-            🔄 Flip Board
-          </button>
         </div>
       </header>
 
@@ -549,6 +543,13 @@ Keep it concise (3-4 sentences).`;
         ) : (
           <>
             <aside className="w-full lg:w-80 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 flex flex-col gap-5 shadow-2xl overflow-y-auto max-h-[calc(100vh-120px)]">
+              <button
+                onClick={() => setOrientation((o) => (o === "w" ? "b" : "w"))}
+                className="px-2 py-2 bg-slate-700/50 hover:bg-slate-600/50 rounded-lg transition-all duration-200 font-medium text-sm border border-slate-600/30 hover:border-slate-500/50 hover:scale-105 active:scale-95"
+              >
+                🔄 Flip Board
+              </button>
+
               <div className="space-y-4 py-2 border-t border-slate-700/50">
                 {(mode === "llm_vs_llm" ||
                   (mode === "human_vs_llm" && orientation === "b") ||
@@ -594,7 +595,7 @@ Keep it concise (3-4 sentences).`;
                 </div>
               )}
 
-              <div className="space-y-4 py-2 border-t border-slate-700/50">
+              <div className="space-y-4 py-2 border-t border-slate-700/50 pt-6">
                 {(mode === "llm_vs_llm" || mode === "stockfish_vs_llm") &&
                   !gameStarted && (
                     <button

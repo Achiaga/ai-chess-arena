@@ -45,7 +45,7 @@ export class TournamentManager {
 
   createEngine(config) {
     if (config.type === "stockfish") {
-      return new StockfishEngine();
+      return new StockfishEngine(config.depth || 10);
     } else {
       return new LLMEngine(config);
     }

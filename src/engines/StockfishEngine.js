@@ -2,9 +2,10 @@ const STOCKFISH_URL =
   "https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.0/stockfish.js";
 
 export class StockfishEngine {
-  constructor() {
+  constructor(depth = 10) {
     this.worker = null;
     this.isReady = false;
+    this.depth = depth;
   }
 
   async init() {
@@ -30,8 +31,10 @@ export class StockfishEngine {
     });
   }
 
-  async getBestMove(fen, depth = 10) {
+  async getBestMove(fen, depth = null) {
     if (!this.worker) await this.init();
+
+    const searchDepth = depth !== null ? depth : this.depth;
 
     return new Promise((resolve) => {
       const handler = (event) => {
@@ -45,7 +48,7 @@ export class StockfishEngine {
 
       this.worker.addEventListener("message", handler);
       this.worker.postMessage(`position fen ${fen}`);
-      this.worker.postMessage(`go depth ${depth}`);
+      this.worker.postMessage(`go depth ${searchDepth}`);
     });
   }
 
