@@ -18,7 +18,8 @@ export const VersusView = ({
   groqApiKey,
   openAiApiKey,
 }) => {
-  const [versusMode, setVersusMode] = useState("human_vs_stockfish");
+  const [whitePlayer, setWhitePlayer] = useState("human");
+  const [blackPlayer, setBlackPlayer] = useState("stockfish");
   const [orientation, setOrientation] = useState("w");
   const [gameStarted, setGameStarted] = useState(false);
   const [coachMessages, setCoachMessages] = useState([]);
@@ -45,28 +46,26 @@ export const VersusView = ({
   useEffect(() => {
     if (chessGame.game.isGameOver() || llmPlayer.thinking) return;
 
-    if (versusMode === "llm_vs_llm" && gameStarted) {
+    // Only auto-play if both players are AI (not human)
+    const bothAI = whitePlayer !== "human" && blackPlayer !== "human";
+    if (bothAI && gameStarted) {
       const timer = setTimeout(() => {
         const turn = chessGame.game.turn();
-        const config = turn === "w" ? whiteAiConfig : blackAiConfig;
-        handleLlmMove(config);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
+        const currentPlayer = turn === "w" ? whitePlayer : blackPlayer;
 
-    if (versusMode === "stockfish_vs_llm" && gameStarted) {
-      const timer = setTimeout(() => {
-        if (chessGame.game.turn() === "w") {
+        if (currentPlayer === "stockfish") {
           handleStockfishMove();
-        } else {
-          handleLlmMove(blackAiConfig);
+        } else if (currentPlayer === "llm") {
+          const config = turn === "w" ? whiteAiConfig : blackAiConfig;
+          handleLlmMove(config);
         }
       }, 1000);
       return () => clearTimeout(timer);
     }
   }, [
     chessGame.fen,
-    versusMode,
+    whitePlayer,
+    blackPlayer,
     llmPlayer.thinking,
     gameStarted,
     whiteAiConfig,
@@ -128,18 +127,14 @@ export const VersusView = ({
     const result = chessGame.makeMove(move);
 
     if (result && !chessGame.game.isGameOver()) {
-      // Trigger AI response for human vs AI modes
-      if (
-        versusMode === "human_vs_stockfish" &&
-        chessGame.game.turn() !== orientation
-      ) {
+      // Trigger AI response if next player is AI
+      const turn = chessGame.game.turn();
+      const nextPlayer = turn === "w" ? whitePlayer : blackPlayer;
+
+      if (nextPlayer === "stockfish") {
         setTimeout(() => handleStockfishMove(), 300);
-      } else if (
-        versusMode === "human_vs_llm" &&
-        chessGame.game.turn() !== orientation
-      ) {
-        const config =
-          chessGame.game.turn() === "w" ? whiteAiConfig : blackAiConfig;
+      } else if (nextPlayer === "llm") {
+        const config = turn === "w" ? whiteAiConfig : blackAiConfig;
         setTimeout(() => handleLlmMove(config), 300);
       }
     }
@@ -296,28 +291,52 @@ Keep it concise (3-4 sentences).`;
 
   return (
     <div className="flex flex-col gap-4 w-full">
-      {/* Versus Mode Selector */}
+      {/* Player Configuration */}
       <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50 shadow-xl">
-        <label className="text-sm font-bold text-slate-400 uppercase mb-2 block">
-          ⚔️ Versus Mode
-        </label>
-        <select
-          value={versusMode}
-          onChange={(e) => {
-            setVersusMode(e.target.value);
-            setGameStarted(false);
-            resetGame();
-          }}
-          className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-4 py-2.5 text-sm outline-none cursor-pointer hover:border-slate-500 transition-all"
-        >
-          <option value="human_vs_stockfish">👤 Human vs Stockfish</option>
-          <option value="human_vs_llm">👤 Human vs LLM</option>
-          <option value="llm_vs_llm">🤖 LLM vs LLM</option>
-          <option value="stockfish_vs_llm">⚔️ Stockfish vs LLM</option>
-        </select>
+        <h3 className="text-sm font-bold text-slate-400 uppercase mb-4">
+          ⚔️ Player Configuration
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-300 uppercase">
+              ⚪ White Player
+            </label>
+            <select
+              value={whitePlayer}
+              onChange={(e) => {
+                setWhitePlayer(e.target.value);
+                setGameStarted(false);
+                resetGame();
+              }}
+              className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm outline-none cursor-pointer hover:border-slate-500 transition-all"
+            >
+              <option value="human">👤 Human</option>
+              <option value="llm">🤖 LLM</option>
+              <option value="stockfish">⚙️ Stockfish</option>
+            </select>
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-300 uppercase">
+              ⚫ Black Player
+            </label>
+            <select
+              value={blackPlayer}
+              onChange={(e) => {
+                setBlackPlayer(e.target.value);
+                setGameStarted(false);
+                resetGame();
+              }}
+              className="w-full bg-slate-900/50 border border-slate-600/50 rounded-lg px-3 py-2 text-sm outline-none cursor-pointer hover:border-slate-500 transition-all"
+            >
+              <option value="human">👤 Human</option>
+              <option value="llm">🤖 LLM</option>
+              <option value="stockfish">⚙️ Stockfish</option>
+            </select>
+          </div>
+        </div>
       </div>
 
-      <>
+      <div className="flex justify-center items-baseline gap-x-6">
         <aside className="w-full lg:w-80 bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 flex flex-col gap-5 shadow-2xl overflow-y-auto max-h-[calc(100vh-120px)]">
           <button
             onClick={() => setOrientation((o) => (o === "w" ? "b" : "w"))}
@@ -327,19 +346,14 @@ Keep it concise (3-4 sentences).`;
           </button>
 
           <div className="space-y-4 py-2 border-t border-slate-700/50">
-            {(versusMode === "llm_vs_llm" ||
-              (versusMode === "human_vs_llm" && orientation === "b") ||
-              (versusMode === "coach" && chessGame.game.turn() === "w")) && (
+            {whitePlayer === "llm" && (
               <AiConfigSection
                 title="⚪ White AI"
                 config={whiteAiConfig}
                 setConfig={setWhiteAiConfig}
               />
             )}
-            {(versusMode === "llm_vs_llm" ||
-              versusMode === "stockfish_vs_llm" ||
-              (versusMode === "human_vs_llm" && orientation === "w") ||
-              (versusMode === "coach" && chessGame.game.turn() === "b")) && (
+            {blackPlayer === "llm" && (
               <AiConfigSection
                 title="⚫ Black AI"
                 config={blackAiConfig}
@@ -348,7 +362,7 @@ Keep it concise (3-4 sentences).`;
             )}
           </div>
 
-          {versusMode === "human_vs_stockfish" && (
+          {(whitePlayer === "stockfish" || blackPlayer === "stockfish") && (
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex justify-between">
                 <span>⚙️ Stockfish Depth</span>
@@ -374,8 +388,8 @@ Keep it concise (3-4 sentences).`;
           )}
 
           <div className="space-y-4 py-2 border-t border-slate-700/50 pt-6">
-            {(versusMode === "llm_vs_llm" ||
-              versusMode === "stockfish_vs_llm") &&
+            {whitePlayer !== "human" &&
+              blackPlayer !== "human" &&
               !gameStarted && (
                 <button
                   onClick={() => setGameStarted(true)}
@@ -472,11 +486,10 @@ Keep it concise (3-4 sentences).`;
             lastMove={chessGame.lastMove}
             checkSquare={chessGame.checkSquare}
             disabled={
-              (versusMode === "human_vs_stockfish" && llmPlayer.thinking) ||
-              versusMode === "llm_vs_llm" ||
-              versusMode === "stockfish_vs_llm" ||
-              (versusMode === "human_vs_llm" && llmPlayer.thinking) ||
-              chessGame.game.isGameOver()
+              llmPlayer.thinking ||
+              chessGame.game.isGameOver() ||
+              (chessGame.game.turn() === "w" && whitePlayer !== "human") ||
+              (chessGame.game.turn() === "b" && blackPlayer !== "human")
             }
           />
 
@@ -573,7 +586,7 @@ Keep it concise (3-4 sentences).`;
             </div>
           </div>
         </aside>
-      </>
+      </div>
     </div>
   );
 };
