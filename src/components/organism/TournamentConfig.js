@@ -1,6 +1,3 @@
-/**
- * Tournament configuration component
- */
 export const TournamentConfig = ({
   whiteType,
   setWhiteType,
